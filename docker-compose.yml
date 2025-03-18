@@ -34,7 +34,7 @@ services:
     restart: always
     volumes:
       - asterisk_logs:/var/log/asterisk
-      - asterisk_sounds:/var/lib/asterisk/sounds/custom
+      - ./asterisk/sounds/custom:/var/lib/asterisk/sounds/custom
     ports:
       - "5060:5060/udp"
       - "5060:5060/tcp"
