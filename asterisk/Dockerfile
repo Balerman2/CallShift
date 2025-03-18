@@ -13,11 +13,18 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --no-cache-dir requests pyst2
 
 # Copy Asterisk configuration
-COPY asterisk-config/extensions.conf /etc/asterisk/
-COPY asterisk-config/sip.conf /etc/asterisk/
-COPY asterisk-config/voicemail.conf /etc/asterisk/
-COPY asterisk-config/agi-bin/authenticate.py /var/lib/asterisk/agi-bin/
+RUN mkdir -p /var/lib/asterisk/agi-bin
+RUN mkdir -p /var/lib/asterisk/sounds/custom
+RUN mkdir -p /etc/asterisk/
+
+COPY asterisk-config/extensions.conf /etc/asterisk/extensions.conf
+COPY asterisk-config/sip.conf /etc/asterisk/sip.conf
+COPY asterisk-config/voicemail.conf /etc/asterisk/voicemail.conf
 COPY asterisk-config/cdr_pgsql.conf /etc/asterisk/cdr_pgsql.conf
+COPY asterisk-config/agi-bin/authenticate.py /var/lib/asterisk/agi-bin/
+COPY asterisk-config/sounds/custom/ /var/lib/asterisk/sounds/custom/
+
+RUN chmod 755 /var/lib/asterisk/agi-bin/authenticate.py
 
 # Copy AGI script
 COPY asterisk-config/agi-bin/authenticate.py /var/lib/asterisk/agi-bin/
