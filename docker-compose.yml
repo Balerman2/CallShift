@@ -1,47 +1,6 @@
 version: '3.8'
 
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: oncall_app
-    restart: always
-    depends_on:
-      - db
-    environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - TELEPO_API_URL=${TELEPO_API_URL}
-      - TELEPO_API_KEY=${TELEPO_API_KEY}
-      - PIN_SALT=${PIN_SALT}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      # For SQLite, just store data.db on a volume, 
-      # but if you’re using Postgres, add DB vars here.
-      - DB_HOST=db
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASS=${DB_PASS}
-    volumes:
-      - ./app.log:/app/app.log
-    networks:
-      - backend
-
-  asterisk:
-    build:
-      context: ./asterisk
-      dockerfile: Dockerfile
-    container_name: oncall_asterisk
-    restart: always
-    volumes:
-      - asterisk_logs:/var/log/asterisk
-      - ./asterisk/sounds/custom:/var/lib/asterisk/sounds/custom
-    ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "10000-20000:10000-20000/udp"
-    networks:
-      - backend
-
   db:
     image: postgres:14
     container_name: oncall_db
@@ -55,11 +14,72 @@ services:
       - ./init-db:/docker-entrypoint-initdb.d
     networks:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oncall_app
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy  # ✅ Waits for database to be fully ready
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - TELEPO_API_URL=${TELEPO_API_URL}
+      - TELEPO_API_KEY=${TELEPO_API_KEY}
+      - PIN_SALT=${PIN_SALT}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+    volumes:
+      - ./app.log:/app/app.log
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:5000/health || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+
+  asterisk:
+    build:
+      context: ./asterisk
+      dockerfile: Dockerfile
+    container_name: oncall_asterisk
+    restart: always
+    depends_on:
+      app:
+        condition: service_healthy  # ✅ Waits for Flask app to be healthy
+    volumes:
+      - ./asterisk/sounds/custom:/var/lib/asterisk/sounds/custom
+      - asterisk_logs:/var/log/asterisk
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-20000:10000-20000/udp"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime seconds' | grep -q 'System uptime'"]
+      interval: 10s
+      retries: 5
+      start_period: 40s
 
   nginx:
     image: nginx:1.21-alpine
     container_name: oncall_nginx
     restart: always
+    depends_on:
+      asterisk:
+        condition: service_healthy  # ✅ Waits for Asterisk to be healthy
     ports:
       - "80:80"
       - "443:443"
@@ -67,11 +87,14 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/ssl:/etc/nginx/ssl
       - ./nginx/logs:/var/log/nginx
-    depends_on:
-      - app
     networks:
       - backend
       - frontend
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
 
 networks:
   frontend:
@@ -79,5 +102,4 @@ networks:
 
 volumes:
   asterisk_logs:
-  asterisk_sounds:
   db_data:
