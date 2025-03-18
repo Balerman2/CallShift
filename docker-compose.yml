@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oncall_app
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - TELEPO_API_URL=${TELEPO_API_URL}
+      - TELEPO_API_KEY=${TELEPO_API_KEY}
+      - PIN_SALT=${PIN_SALT}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # For SQLite, just store data.db on a volume, 
+      # but if you’re using Postgres, add DB vars here.
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+    volumes:
+      - ./app.log:/app/app.log
+    networks:
+      - backend
+
+  asterisk:
+    build:
+      context: ./asterisk
+      dockerfile: Dockerfile
+    container_name: oncall_asterisk
+    restart: always
+    volumes:
+      - asterisk_logs:/var/log/asterisk
+      - asterisk_sounds:/var/lib/asterisk/sounds/custom
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-20000:10000-20000/udp"
+    networks:
+      - backend
+
+  db:
+    image: postgres:14
+    container_name: oncall_db
+    restart: always
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:1.21-alpine
+    container_name: oncall_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - backend
+      - frontend
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  asterisk_logs:
+  asterisk_sounds:
+  db_data:
