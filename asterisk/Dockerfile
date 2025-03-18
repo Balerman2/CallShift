@@ -16,6 +16,8 @@ RUN pip3 install --no-cache-dir requests pyst2
 COPY asterisk-config/extensions.conf /etc/asterisk/
 COPY asterisk-config/sip.conf /etc/asterisk/
 COPY asterisk-config/voicemail.conf /etc/asterisk/
+COPY asterisk-config/agi-bin/authenticate.py /var/lib/asterisk/agi-bin/
+COPY asterisk-config/cdr_pgsql.conf /etc/asterisk/cdr_pgsql.conf
 
 # Copy AGI script
 COPY asterisk-config/agi-bin/authenticate.py /var/lib/asterisk/agi-bin/
@@ -29,3 +31,4 @@ EXPOSE 5060/udp 5060/tcp 10000-20000/udp
 
 # Run Asterisk in the foreground
 CMD ["asterisk", "-f"]
+
